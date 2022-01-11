@@ -1,3 +1,3 @@
 # Question Answering
 
-Question Answering on the SQuAD 2.0 dataset.
+Question Answering on the SQuAD 1.1 dataset.
