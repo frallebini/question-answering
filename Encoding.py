@@ -1,100 +1,124 @@
+from __future__ import annotations
 import json
-from tqdm import tqdm
-from transformers import DistilBertTokenizerFast
 import torch
+import transformers
+from random import randint
 
-tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
 
-def get_encodings_from_dataset(fname: str):
+def read_squad(path: str) -> tuple[list(str), list(str), list(str), list(dict)]:
     """
-        Reads the training set of SQuaD 1.1 and creates a Dataset object to be fed to the model for the fine-tuning
-
-        Args:
-            fname: name of the file containing the training set.
-        """
-    train_contexts, train_questions, train_answers = read_squad(fname)
-    add_end_idx(train_answers, train_contexts)
-    train_encodings = tokenizer(train_contexts, train_questions, truncation=True, padding=True)
-    add_token_positions(train_encodings, train_answers)
-    train_dataset = SquadDataset(train_encodings)
-    return train_dataset
-
-
-def read_squad(fname: str):
-    # open JSON file and load intro dictionary
-    with open(fname) as f:
+    Reads the SQuaD 1.1 training set (a .json file) and, for each question, 
+    stores its context, text (i.e. the question itself), id, and answer info 
+    (i.e. answer start index and answer text) into a list.
+    """
+    with open(path, 'rb') as f:
       squad = json.load(f)
 
-    # initialize lists for contexts, questions, and answers
     contexts = []
     questions = []
+    ids = []
     answers = []
-    # iterate through all data in squad data
-    for topic in tqdm(squad['data']):
+
+    for topic in squad['data']:
         for paragraph in topic['paragraphs']:
             context = paragraph['context']
-            for qa in paragraph['qas']:
-                question = qa['question']
-                for answer in qa['answers']:
-                    # append data to lists
-                    contexts.append(context)
-                    questions.append(question)
-                    answers.append(answer)
-    # return formatted data lists
-    return contexts, questions, answers
+            for question_data in paragraph['qas']:
+                question = question_data['question']
+                id = question_data['id']
+                # check that no question in the training set has more than one answer
+                assert len(question_data['answers']) == 1
+                answer = question_data['answers'][0]
 
-def add_end_idx(answers, contexts):
-    # loop through each answer-context pair
+                contexts.append(context)
+                questions.append(question)
+                ids.append(id)
+                answers.append(answer)
+
+    return contexts, questions, ids, answers
+
+
+def add_end_idx(answers: list(dict), contexts: list(str)) -> None:
+    """
+    Adds a field to each dictionary in `answers` denoting the index of the 
+    last character of the answer text within its context, so as to identify
+    where the answer ends.
+    """
     for answer, context in zip(answers, contexts):
-        # gold_text refers to the answer we are expecting to find in context
-        gold_text = answer['text']
-        # we already know the start index
-        start_idx = answer['answer_start']
-        # and ideally this would be the end index...
-        end_idx = start_idx + len(gold_text)
+        gold_text = answer['text']  
+        start_idx = answer['answer_start']  
+        end_idx = start_idx + len(gold_text) - 1
 
-        # ...however, sometimes squad answers are off by a character or two
-        if context[start_idx:end_idx] == gold_text:
-            # if the answer is not off :)
-            answer['answer_end'] = end_idx
-        else:
-            # this means the answer is off by 1-2 tokens
-            for n in [1, 2]:
-                if context[start_idx - n:end_idx - n] == gold_text:
-                    answer['answer_start'] = start_idx - n
-                    answer['answer_end'] = end_idx - n
+        assert answer['text'] == context[start_idx : end_idx + 1]  # sanity check
 
-def add_token_positions(encodings, answers):
-    # initialize lists to contain the token indices of answer start/end
+        answer['answer_end'] = end_idx
+
+
+def encode(contexts: list(str), 
+           questions: list(str), 
+           tokenizer: transformers.BertTokenizer) -> transformers.BatchEncoding:
+    """
+    Creates BERT context–question encodings, i.e. context token indices + [SEP] + question token indices.
+    """
+    encodings = tokenizer(contexts, questions, padding=True, truncation=True)
+    return encodings
+
+
+def add_token_positions_and_ids(encodings: transformers.BatchEncoding, 
+                                answers: list(str), 
+                                ids: list(str),
+                                tokenizer: transformers.BertTokenizer) -> None:
+    """
+    Adds three fields to the `BatchEncoding` object returned by `encode` (which is basically
+    a standard Python dictionary):
+    - The index of the first token of the answer.
+    - The index of the last token of the answer.
+    - The ID of the answer.
+    """
     start_positions = []
     end_positions = []
+    
     for i in range(len(answers)):
-        # append start/end token position using char_to_token method
         start_positions.append(encodings.char_to_token(i, answers[i]['answer_start']))
         end_positions.append(encodings.char_to_token(i, answers[i]['answer_end']))
 
-        # if start position is None, the answer passage has been truncated
-        if start_positions[-1] is None:
+        if start_positions[-1] is None:  # the answer passage has been completely truncated
             start_positions[-1] = tokenizer.model_max_length
-        # end position cannot be found, char_to_token found space, so shift position until found
         shift = 1
-        while end_positions[-1] is None:
+        while end_positions[-1] is None:  # the answer passage has been patially truncated
             end_positions[-1] = encodings.char_to_token(i, answers[i]['answer_end'] - shift)
             shift += 1
-    # update our encodings object with the new token-based start/end positions
-    encodings.update({'start_positions': start_positions, 'end_positions': end_positions})
+
+    encodings.update({
+        'start_positions': start_positions, 
+        'end_positions': end_positions, 
+        'ids': ids
+    })
+
 
 class SquadDataset(torch.utils.data.Dataset):
     def __init__(self, encodings):
         self.encodings = encodings
 
     def __getitem__(self, idx):
-        return {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
+        return {key: torch.tensor(val[idx]) for key, val in self.encodings.items() if key != 'ids'}
 
     def __len__(self):
         return len(self.encodings.input_ids)
 
 
+def build_dataset(fname: str, tokenizer: transformers.BertTokenizer = None) -> SquadDataset:
+    if not tokenizer:
+        tokenizer = transformers.DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
+
+    contexts, questions, ids, answers = read_squad(fname)
+    add_end_idx(answers, contexts)
+    encodings = encode(contexts, questions, tokenizer)
+    add_token_positions_and_ids(encodings, answers, ids, tokenizer)
+    dataset = SquadDataset(encodings)
+    
+    return dataset
+
+
 if __name__ == '__main__':
-     dataset = get_encodings_from_dataset('training_set.json')
-     print(dataset[0])
+    dataset = build_dataset('training_set.json')
+    print(dataset[0])
