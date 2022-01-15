@@ -6,11 +6,13 @@ authors = [
     "Francesco Ballerini <francesco.ballerini3@studio.unibo.it>",
     "Emmanuele Bollino <emmanuele.bollino@studio.unibo.it>",
     "Tommaso Giannuli <tommaso.giannuli@studio.unibo.it>",
-    "Manuel Mariani <manuel.mariani2@studio.unibo.it>"]
+    "Manuel Mariani <manuel.mariani2@studio.unibo.it>"
+]
 
 [tool.poetry.dependencies]
 python = "^3.8.1"
 transformers = "4.15.0"
+torch = "1.10.1"
 
 [tool.poetry.dev-dependencies]
 
