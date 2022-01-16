@@ -2,7 +2,6 @@ from __future__ import annotations
 import json
 import torch
 import transformers
-from random import randint
 
 
 def read_squad(path: str) -> tuple[list(str), list(str), list(str), list(dict)]:
@@ -96,7 +95,16 @@ def add_token_positions_and_ids(encodings: transformers.BatchEncoding,
 
 
 class SquadDataset(torch.utils.data.Dataset):
-    def __init__(self, encodings):
+    
+    def __init__(self, fname: str, tokenizer: transformers.BertTokenizer = None):
+        if not tokenizer:
+            tokenizer = transformers.DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
+        
+        contexts, questions, ids, answers = read_squad(fname)
+        add_end_idx(answers, contexts)
+        encodings = encode(contexts, questions, tokenizer)
+        add_token_positions_and_ids(encodings, answers, ids, tokenizer)
+
         self.encodings = encodings
 
     def __getitem__(self, idx):
@@ -106,19 +114,5 @@ class SquadDataset(torch.utils.data.Dataset):
         return len(self.encodings.input_ids)
 
 
-def build_dataset(fname: str, tokenizer: transformers.BertTokenizer = None) -> SquadDataset:
-    if not tokenizer:
-        tokenizer = transformers.DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
-
-    contexts, questions, ids, answers = read_squad(fname)
-    add_end_idx(answers, contexts)
-    encodings = encode(contexts, questions, tokenizer)
-    add_token_positions_and_ids(encodings, answers, ids, tokenizer)
-    dataset = SquadDataset(encodings)
-    
-    return dataset
-
-
 if __name__ == '__main__':
-    dataset = build_dataset('training_set.json')
-    print(dataset[0])
+    dataset = SquadDataset('training_set.json')
