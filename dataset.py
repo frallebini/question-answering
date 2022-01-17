@@ -2,89 +2,151 @@ from __future__ import annotations
 import json
 import torch
 import transformers
+import pandas as pd
+import math
 
 
-def read_squad(path: str) -> tuple[list(str), list(str), list(str), list(dict)]:
+def read_squad(path: str) -> pd.DataFrame:
     """
-    Reads the SQuaD 1.1 training set (a .json file) and, for each question, 
-    stores its context, text (i.e. the question itself), id, and answer info 
-    (i.e. answer start index and answer text) into a list.
+    Reads the SQuaD 1.1 training set (a .json file) and stores each question and 
+    related information into a dataframe.
     """
     with open(path, 'rb') as f:
       squad = json.load(f)
 
-    contexts = []
-    questions = []
-    ids = []
-    answers = []
+    raw_data = []
 
     for topic in squad['data']:
+        title = topic['title']
         for paragraph in topic['paragraphs']:
             context = paragraph['context']
             for question_data in paragraph['qas']:
                 question = question_data['question']
                 id = question_data['id']
-                # check that no question in the training set has more than one answer
+                # check that no question in the training set has more than one
+                # answer
                 assert len(question_data['answers']) == 1
                 answer = question_data['answers'][0]
+                answer_text = answer['text']
+                answer_start = answer['answer_start']
 
-                contexts.append(context)
-                questions.append(question)
-                ids.append(id)
-                answers.append(answer)
+                answer_end = answer_start + len(answer_text) - 1
+                # sanity check
+                assert answer_text == context[answer_start : answer_end + 1]
 
-    return contexts, questions, ids, answers
+                raw_data.append((id,
+                                title,
+                                context,
+                                question,
+                                answer_text,
+                                answer_start,
+                                answer_end))
+
+    data = pd.DataFrame.from_records(raw_data, columns=['id', 
+                                                        'title', 
+                                                        'context', 
+                                                        'question', 
+                                                        'answer', 
+                                                        'answer_start',
+                                                        'answer_end'])
+    return data
 
 
-def add_end_idx(answers: list(dict), contexts: list(str)) -> None:
+def train_val_split(data: pd.DataFrame, 
+                    train_ratio=0.75) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Adds a field to each dictionary in `answers` denoting the index of the 
-    last character of the answer text within its context, so as to identify
-    where the answer ends.
+    Splits the dataframe returned by `read_squad` into training and validation 
+    data. Specifically, the first `ceil(n_samples * train_ratio)` samples are 
+    reserved for training and the remainder for validation. 
+    
+    If, by doing so, the split occurs between samples with the same `title`, 
+    then the smaller subset of such samples is moved from training to validation 
+    data or viceversa. As a result, training and validation data do not share 
+    any `title`.
     """
-    for answer, context in zip(answers, contexts):
-        gold_text = answer['text']  
-        start_idx = answer['answer_start']  
-        end_idx = start_idx + len(gold_text) - 1
+    n_samples = data.shape[0]
+    n_train = math.ceil(n_samples * train_ratio)
+    n_val = n_samples - n_train
 
-        assert answer['text'] == context[start_idx : end_idx + 1]  # sanity check
+    train_data = data.iloc[:n_train]
+    val_data = data.iloc[n_train:].reset_index(drop=True)
 
-        answer['answer_end'] = end_idx
+    # since samples are still ordered, the title of the first sample in the 
+    # validation set is the one that might have been splitted between the two 
+    # sets
+    shared_title = val_data.iloc[0]['title']
+    if shared_title not in train_data['title']:
+        # we got lucky: the split occurs precisely where a title ends and the 
+        # new one begins
+        return train_data, val_data
+    
+    shared_title_mask = lambda df: df['title'] == shared_title
+    shared_title_count = lambda df: df[shared_title_mask(df)].shape[0]
+
+    n_shared_title_train = shared_title_count(train_data)
+    n_shared_title_var = shared_title_count(val_data)
+
+    # if the training set contains less samples with the shared title then the 
+    # validation set, then move those samples to the validation set
+    if n_shared_title_train < n_shared_title_var:
+        train_portion = train_data[shared_title_mask(train_data)]
+        val_data = pd.concat((train_portion, val_data), ignore_index=True)
+        train_data = train_data.drop(train_portion.index)
+        assert val_data.shape[0] == n_val + train_portion.shape[0]
+        assert train_data.shape[0] == n_train - train_portion.shape[0]
+    else:  # otherwise do the opposite
+        val_portion = val_data[shared_title_mask(val_data)]
+        train_data = pd.concat((train_data, val_portion), ignore_index=True)
+        val_data = val_data.drop(val_portion.index)
+        assert train_data.shape[0] == n_train + val_portion.shape[0]
+        assert val_data.shape[0] == n_val - val_portion.shape[0]
+
+    assert set(train_data['title']).intersection(val_data['title']) == {}
+
+    return train_data, val_data
 
 
-def encode(contexts: list(str), 
-           questions: list(str), 
+def encode(data: pd.DataFrame, 
            tokenizer: transformers.BertTokenizer) -> transformers.BatchEncoding:
     """
-    Creates BERT context–question encodings, i.e. context token indices + [SEP] + question token indices.
+    Creates BERT context-question encodings, i.e. context token indices + [SEP] 
+    + question token indices.
     """
+    contexts = list(data['context'])
+    questions = list(data['question'])
     encodings = tokenizer(contexts, questions, padding=True, truncation=True)
+    
     return encodings
 
 
 def add_token_positions_and_ids(encodings: transformers.BatchEncoding, 
-                                answers: list(str), 
-                                ids: list(str),
+                                data: pd.DataFrame,
                                 tokenizer: transformers.BertTokenizer) -> None:
     """
-    Adds three fields to the `BatchEncoding` object returned by `encode` (which is basically
-    a standard Python dictionary):
+    Adds three fields to the `BatchEncoding` object returned by `encode` (which 
+    is basically a standard Python dictionary):
     - The index of the first token of the answer.
     - The index of the last token of the answer.
     - The ID of the answer.
     """
     start_positions = []
     end_positions = []
+    answer_starts = list(data['answer_start'])
+    answer_ends = list(data['answer_end'])
+    ids = list(data['id'])
     
-    for i in range(len(answers)):
-        start_positions.append(encodings.char_to_token(i, answers[i]['answer_start']))
-        end_positions.append(encodings.char_to_token(i, answers[i]['answer_end']))
+    for i in range(len(answer_starts)):
+        start_positions.append(encodings.char_to_token(i, answer_starts[i]))
+        end_positions.append(encodings.char_to_token(i, answer_ends[i]))
 
-        if start_positions[-1] is None:  # the answer passage has been completely truncated
+        if start_positions[-1] is None:  
+            # the answer passage has been completely truncated
             start_positions[-1] = tokenizer.model_max_length
         shift = 1
-        while end_positions[-1] is None:  # the answer passage has been patially truncated
-            end_positions[-1] = encodings.char_to_token(i, answers[i]['answer_end'] - shift)
+        while end_positions[-1] is None:  
+            # the answer passage has been patially truncated
+            end_positions[-1] = encodings.char_to_token(
+                i, answer_ends[i] - shift)
             shift += 1
 
     encodings.update({
@@ -96,23 +158,29 @@ def add_token_positions_and_ids(encodings: transformers.BatchEncoding,
 
 class SquadDataset(torch.utils.data.Dataset):
     
-    def __init__(self, fname: str, tokenizer: transformers.BertTokenizer = None):
-        if not tokenizer:
-            tokenizer = transformers.DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
+    def __init__(self, 
+                 data: pd.DataFrame, 
+                 tokenizer: transformers.BertTokenizer = None):
         
-        contexts, questions, ids, answers = read_squad(fname)
-        add_end_idx(answers, contexts)
-        encodings = encode(contexts, questions, tokenizer)
-        add_token_positions_and_ids(encodings, answers, ids, tokenizer)
+        if not tokenizer:
+            tokenizer = transformers.DistilBertTokenizerFast \
+                                    .from_pretrained('distilbert-base-uncased')
+        encodings = encode(data, tokenizer)
+        add_token_positions_and_ids(encodings, data, tokenizer)
 
         self.encodings = encodings
 
-    def __getitem__(self, idx):
-        return {key: torch.tensor(val[idx]) for key, val in self.encodings.items() if key != 'ids'}
+    def __getitem__(self, index: int) -> dict:
+        return {
+            k: torch.tensor(v[index]) 
+                for k, v in self.encodings.items() if k != 'ids'
+        }
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.encodings.input_ids)
 
 
 if __name__ == '__main__':
-    dataset = SquadDataset('training_set.json')
+    train_data, val_data = train_val_split(read_squad('training_set.json'))
+    train_dataset = SquadDataset(train_data)
+    val_dataset = SquadDataset(val_data)
