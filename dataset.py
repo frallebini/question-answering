@@ -31,7 +31,6 @@ def read_squad(path: str) -> pd.DataFrame:
                 answer_start = answer['answer_start']
 
                 answer_end = answer_start + len(answer_text) - 1
-                # sanity check
                 assert answer_text == context[answer_start : answer_end + 1]
 
                 raw_data.append((id,
@@ -109,8 +108,8 @@ def train_val_split(data: pd.DataFrame,
 def encode(data: pd.DataFrame, 
            tokenizer: transformers.BertTokenizer) -> transformers.BatchEncoding:
     """
-    Creates BERT context-question encodings, i.e. context token indices + [SEP] 
-    + question token indices.
+    Creates BERT context-question encodings, i.e. context token indices (a.k.a. 
+    input IDs) + [SEP] + question token indices.
     """
     contexts = list(data['context'])
     questions = list(data['question'])
@@ -163,14 +162,14 @@ class SquadDataset(torch.utils.data.Dataset):
                  tokenizer: transformers.BertTokenizer = None):
         
         if not tokenizer:
-            tokenizer = transformers.DistilBertTokenizerFast \
-                                    .from_pretrained('distilbert-base-uncased')
+            tokenizer = transformers.DistilBertTokenizerFast.from_pretrained(
+                'distilbert-base-uncased')
         encodings = encode(data, tokenizer)
         add_token_positions_and_ids(encodings, data, tokenizer)
 
         self.encodings = encodings
 
-    def __getitem__(self, index: int) -> dict:
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
         return {
             k: torch.tensor(v[index]) 
                 for k, v in self.encodings.items() if k != 'ids'
