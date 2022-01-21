@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import torch
 import transformers
+from transformers import DistilBertTokenizerFast
 import pandas as pd
 import math
 
@@ -159,11 +160,7 @@ class SquadDataset(torch.utils.data.Dataset):
     
     def __init__(self, 
                  data: pd.DataFrame, 
-                 tokenizer: transformers.BertTokenizer = None):
-        
-        if not tokenizer:
-            tokenizer = transformers.DistilBertTokenizerFast.from_pretrained(
-                'distilbert-base-uncased')
+                 tokenizer: transformers.BertTokenizer):
         encodings = encode(data, tokenizer)
         add_token_positions_and_ids(encodings, data, tokenizer)
 
@@ -181,5 +178,7 @@ class SquadDataset(torch.utils.data.Dataset):
 
 if __name__ == '__main__':
     train_data, val_data = train_val_split(read_squad('training_set.json'))
-    train_dataset = SquadDataset(train_data)
-    val_dataset = SquadDataset(val_data)
+    tokenizer = DistilBertTokenizerFast.from_pretrained(
+        'distilbert-base-uncased')
+    train_dataset = SquadDataset(train_data, tokenizer)
+    val_dataset = SquadDataset(val_data, tokenizer)
