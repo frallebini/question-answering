@@ -13,20 +13,24 @@ class SquadDataset(torch.utils.data.Dataset):
                  tokenizer: transformers.BertTokenizer):
         self.data = data
         self.tokenizer = tokenizer
-        self.encodings = self._encode()
-        self._add_token_positions_and_ids()
+        self.encodings = None
+        self.updated = False
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        self.update_encoding()
+
         return {
             k: torch.tensor(v[index])
             for k, v in self.encodings.items() if k != 'ids'
         }
 
     def __len__(self) -> int:
+        self.update_encoding()
+
         return len(self.encodings.input_ids)
 
     @classmethod
-    def from_json(cls, path: str, tokenizer: transformers.BertTokenizer) -> pd.DataFrame:
+    def _data_from_json(cls, path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Reads the SQuaD 1.1 training set (a .json file) and stores each question and
         related information into a dataframe.
@@ -68,9 +72,15 @@ class SquadDataset(torch.utils.data.Dataset):
                                                             'answer',
                                                             'answer_start',
                                                             'answer_end'])
-        return cls(data, tokenizer)
 
-    def train_val_split(self, train_ratio=0.75) -> tuple[SquadDataset, SquadDataset]:
+        return data
+
+    @classmethod
+    def from_json(cls, path: str, tokenizer: transformers.BertTokenizer) -> pd.DataFrame:
+        return cls(cls._data_from_json(path), tokenizer)
+
+    @classmethod
+    def _train_val_split_data(cls, data: pd.DataFrame, train_ratio=0.75) -> tuple[SquadDataset, SquadDataset]:
         """
         Splits the dataframe returned by `read_squad` into training and validation
         data. Specifically, the first `ceil(n_samples * train_ratio)` samples are
@@ -81,12 +91,12 @@ class SquadDataset(torch.utils.data.Dataset):
         data or viceversa. As a result, training and validation data do not share
         any `title`.
         """
-        n_samples = self.data.shape[0]
+        n_samples = data.shape[0]
         n_train = math.ceil(n_samples * train_ratio)
         n_val = n_samples - n_train
 
-        train_data = self.data.iloc[:n_train]
-        val_data = self.data.iloc[n_train:].reset_index(drop=True)
+        train_data = data.iloc[:n_train]
+        val_data = data.iloc[n_train:].reset_index(drop=True)
 
         # since samples are still ordered, the title of the first sample in the
         # validation set is the one that might have been split between the two
@@ -120,49 +130,60 @@ class SquadDataset(torch.utils.data.Dataset):
 
         assert set(train_data['title']).intersection(val_data['title']) == {}
 
+        return train_data, val_data
+
+    def train_val_split(self, train_ratio=0.75):
+        train_data, val_data = self._train_val_split_data(self.data, train_ratio)
         return SquadDataset(train_data, self.tokenizer), SquadDataset(val_data, self.tokenizer)
 
-    def _encode(self) -> transformers.BatchEncoding:
+    def update_encoding(self, force=False):
+        if self.encodings is None or self.updated or force:
+            self.encodings = self._encode(self.data, self.tokenizer)
+
+    @classmethod
+    def _encode(cls, data: pd.DataFrame, tokenizer: transformers.BertTokenizer) -> transformers.BatchEncoding:
         """
         Creates BERT context-question encodings, i.e. context token indices (a.k.a.
         input IDs) + [SEP] + question token indices.
-        """
-        contexts = list(self.data['context'])
-        questions = list(self.data['question'])
-        encodings = self.tokenizer(contexts, questions, padding=True, truncation=True)
 
-        return encodings
-
-    def _add_token_positions_and_ids(self) -> None:
-        """
         Adds three fields to the `BatchEncoding` object returned by `encode` (which
         is basically a standard Python dictionary):
         - The index of the first token of the answer.
         - The index of the last token of the answer.
         - The ID of the answer.
         """
+        contexts = list(data['context'])
+        questions = list(data['question'])
+        encodings = tokenizer(contexts, questions, padding=True, truncation=True)
+
         start_positions = []
         end_positions = []
-        answer_starts = list(self.data['answer_start'])
-        answer_ends = list(self.data['answer_end'])
-        ids = list(self.data['id'])
+        answer_starts = list(data['answer_start'])
+        answer_ends = list(data['answer_end'])
+        ids = list(data['id'])
 
         for i in range(len(answer_starts)):
-            start_positions.append(self.encodings.char_to_token(i, answer_starts[i]))
-            end_positions.append(self.encodings.char_to_token(i, answer_ends[i]))
+            start_positions.append(encodings.char_to_token(i, answer_starts[i]))
+            end_positions.append(encodings.char_to_token(i, answer_ends[i]))
 
             if start_positions[-1] is None:
                 # the answer passage has been completely truncated
-                start_positions[-1] = self.tokenizer.model_max_length
+                start_positions[-1] = tokenizer.model_max_length
             shift = 1
             while end_positions[-1] is None:
                 # the answer passage has been partially truncated
-                end_positions[-1] = self.encodings.char_to_token(
+                end_positions[-1] = encodings.char_to_token(
                     i, answer_ends[i] - shift)
                 shift += 1
 
-        self.encodings.update({
+        encodings.update({
             'start_positions': start_positions,
             'end_positions': end_positions,
             'ids': ids
         })
+
+        return encodings
+
+    def set_data(self, data: pd.DataFrame):
+        self.data = data
+        self.updated = True
