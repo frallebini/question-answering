@@ -7,6 +7,9 @@ import math
 
 
 class SquadDataset(torch.utils.data.Dataset):
+    """
+    Represents an instance of the SQuAD 1.1 Dataset
+    """
 
     def __init__(self,
                  data: pd.DataFrame,
@@ -30,10 +33,10 @@ class SquadDataset(torch.utils.data.Dataset):
         return len(self.encodings.input_ids)
 
     @classmethod
-    def _data_from_json(cls, path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def _data_from_json(cls, path: str) -> pd.DataFrame:
         """
         Reads the SQuaD 1.1 training set (a .json file) and stores each question and
-        related information into a dataframe.
+        related information into a Pandas dataframe.
         """
         with open(path, 'rb') as f:
             squad = json.load(f)
@@ -77,13 +80,16 @@ class SquadDataset(torch.utils.data.Dataset):
 
     @classmethod
     def from_json(cls, path: str, tokenizer: transformers.BertTokenizer) -> pd.DataFrame:
+        """
+        Instantiates a SquadDataset from a JSON file
+        """
         return cls(cls._data_from_json(path), tokenizer)
 
     @classmethod
-    def _train_val_split_data(cls, data: pd.DataFrame, train_ratio=0.75) -> tuple[SquadDataset, SquadDataset]:
+    def _train_val_split_data(cls, data: pd.DataFrame, train_ratio=0.75) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Splits the dataframe returned by `read_squad` into training and validation
-        data. Specifically, the first `ceil(n_samples * train_ratio)` samples are
+        Splits the given dataframe into training and validation data.
+        Specifically, the first `ceil(n_samples * train_ratio)` samples are
         reserved for training and the remainder for validation.
 
         If, by doing so, the split occurs between samples with the same `title`,
@@ -132,11 +138,18 @@ class SquadDataset(torch.utils.data.Dataset):
 
         return train_data, val_data
 
-    def train_val_split(self, train_ratio=0.75):
+    def train_val_split(self, train_ratio=0.75) -> tuple[SquadDataset, SquadDataset]:
+        """
+        Splits the current SquadDataset into two SquadDatasets.
+        One for training and the other for validation purposes.
+        """
         train_data, val_data = self._train_val_split_data(self.data, train_ratio)
         return SquadDataset(train_data, self.tokenizer), SquadDataset(val_data, self.tokenizer)
 
     def update_encoding(self, force=False):
+        """
+        Updates the encodings if necessary. Encodings are produced in a lazy way.
+        """
         if self.encodings is None or self.updated or force:
             self.encodings = self._encode(self.data, self.tokenizer)
 
@@ -146,7 +159,7 @@ class SquadDataset(torch.utils.data.Dataset):
         Creates BERT context-question encodings, i.e. context token indices (a.k.a.
         input IDs) + [SEP] + question token indices.
 
-        Adds three fields to the `BatchEncoding` object returned by `encode` (which
+        Encodings will contain three more fields to the `BatchEncoding` object returned by `encode` (which
         is basically a standard Python dictionary):
         - The index of the first token of the answer.
         - The index of the last token of the answer.
@@ -185,5 +198,8 @@ class SquadDataset(torch.utils.data.Dataset):
         return encodings
 
     def set_data(self, data: pd.DataFrame):
+        """
+        Changes the current dataframe of the SquadDataset object.
+        """
         self.data = data
         self.updated = True
