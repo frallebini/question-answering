@@ -1,0 +1,11 @@
+# Editors
+.vscode
+.idea
+.DS_Store
+.venv
+
+# Artifacts
+wandb
+
+# Others
+__pycache__
