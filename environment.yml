@@ -1,0 +1,14 @@
+name: nlp-question-answering
+channels:
+  - defaults
+  - pytorch
+  - huggingface
+  - conda-forge
+dependencies:
+  - transformers
+  - cudatoolkit=11.3
+  - pytorch
+  - pandas
+  - notebook
+  - torchinfo
+prefix: C:\ProgramData\Miniconda3\envs\nlp-question-answering
