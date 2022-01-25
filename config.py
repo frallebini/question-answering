@@ -3,5 +3,9 @@ conf = {
     'DATASET_FILE': 'training_set.json',
     'TRAIN_RATIO': 0.75,
     'BATCH_SIZE': 12,
-    'N_EPOCHS': 4
+    'N_EPOCHS': 4,
+    'TRAIN_MODEL': True,
+    'SAVE_MODEL': True,
+    'MODELS_FOLDER': './models',
+    'MODEL_LOAD_NAME': 'model_0125.pt'
 }

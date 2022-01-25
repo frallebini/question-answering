@@ -1,21 +1,21 @@
 from __future__ import annotations
 import json
-import torch
 import transformers
 import pandas as pd
-import math
 from dataset import SquadDataset
+
 
 class Test_SquadDataset(SquadDataset):
     """
-    Represents an instance of the SQuAD 1.1 Dataset for testing purpose
+    PyTorch wrapper for SQuaD 1.1. (for testing purposes, therefore with no 
+    answers).
     """
 
     @classmethod
     def _data_from_json(cls, path: str) -> pd.DataFrame:
         """
-        Reads the SQuaD 1.1 training set (a .json file) and stores each question and
-        related information into a Pandas dataframe.
+        Reads the SQuaD 1.1 training set (a .json file) and stores each question
+        and related information into a Pandas dataframe.
         """
         with open(path, 'rb') as f:
             squad = json.load(f)
@@ -43,11 +43,13 @@ class Test_SquadDataset(SquadDataset):
         return data
 
     @classmethod
-    def _encode(cls, data: pd.DataFrame, tokenizer: transformers.BertTokenizer) -> transformers.BatchEncoding:
+    def _encode(cls, 
+                data: pd.DataFrame, 
+                tokenizer: transformers.BertTokenizer
+                ) -> transformers.BatchEncoding:
         """
-        Creates BERT context-question encodings, i.e. context token indices (a.k.a.
-        input IDs) + [SEP] + question token indices.
-
+        Creates BERT context-question encodings, i.e. context token indices 
+        (a.k.a. input IDs) + [SEP] + question token indices.
         """
         contexts = list(data['context'])
         questions = list(data['question'])
