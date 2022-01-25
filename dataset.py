@@ -79,7 +79,7 @@ class SquadDataset(torch.utils.data.Dataset):
         return data
 
     @classmethod
-    def from_json(cls, path: str, tokenizer: transformers.BertTokenizer) -> pd.DataFrame:
+    def from_json(cls, path: str, tokenizer: transformers.BertTokenizer) -> SquadDataset:
         """
         Instantiates a SquadDataset from a JSON file
         """
