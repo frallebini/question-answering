@@ -45,7 +45,7 @@ class Test_SquadDataset(SquadDataset):
     @classmethod
     def _encode(cls, 
                 data: pd.DataFrame, 
-                tokenizer: transformers.BertTokenizer
+                tokenizer: transformers.BertTokenizerFast 
                 ) -> transformers.BatchEncoding:
         """
         Creates BERT context-question encodings, i.e. context token indices 

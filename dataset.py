@@ -12,7 +12,7 @@ class SquadDataset(torch.utils.data.Dataset):
     """
     def __init__(self,
                  data: pd.DataFrame,
-                 tokenizer: transformers.BertTokenizer):
+                 tokenizer: transformers.BertTokenizerFast ):
         self.data = data
         self.tokenizer = tokenizer
         self.encodings = None
@@ -80,7 +80,7 @@ class SquadDataset(torch.utils.data.Dataset):
     @classmethod
     def from_json(cls, 
                   path: str, 
-                  tokenizer: transformers.BertTokenizer) -> SquadDataset:
+                  tokenizer: transformers. BertTokenizerFast ) -> SquadDataset:
         """
         Instantiates a `SquadDataset` object from a JSON file.
         """
@@ -148,7 +148,8 @@ class SquadDataset(torch.utils.data.Dataset):
         Splits the current dataset into two `SquadDataset` objects, one for 
         training and the other for validation purposes.
         """
-        train_data, val_data = self._train_val_split_data(self.data, train_ratio)
+        train_data, val_data = self._train_val_split_data(self.data, 
+                                                          train_ratio)
         return (SquadDataset(train_data, self.tokenizer), 
                 SquadDataset(val_data, self.tokenizer))
 
@@ -163,7 +164,7 @@ class SquadDataset(torch.utils.data.Dataset):
     @classmethod
     def _encode(cls, 
                 data: pd.DataFrame, 
-                tokenizer: transformers.BertTokenizer
+                tokenizer: transformers. BertTokenizerFast 
                 ) -> transformers.BatchEncoding:
         """
         Creates BERT context-question encodings, i.e. context token indices 
