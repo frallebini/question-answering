@@ -4,6 +4,9 @@
 .DS_Store
 .venv
 
+# Models
+models
+
 # Artifacts
 wandb
 
