@@ -43,15 +43,16 @@ def train_loop(model: DistilBertForQuestionAnswering,
             loss = outputs['loss']  # computed as (start_loss + end_loss) / 2
             # where start_loss and end_loss are, in turn, computed as averages 
             # over the batch
-            start_acc = compute_accuracy(start_pred, start_true)
-            end_acc = compute_accuracy(end_pred, end_true)
-            total_acc = (start_acc + end_acc) / 2
+            n_correct_start = n_correct(start_pred, start_true)
+            n_correct_end = n_correct(end_pred, end_true)
+            n_correct_avg = (n_correct_start + n_correct_end) / 2
 
-            train_iter.set_postfix(loss=loss.item(), acc=total_acc)
+            train_iter.set_postfix(loss=loss.item(), 
+                                   acc=n_correct_avg / n_samples)
             
             n_train += n_samples
             train_loss += loss.item() * n_samples
-            train_acc += total_acc * n_samples
+            train_acc += n_correct_avg
             
             loss.backward()
             
@@ -108,17 +109,17 @@ def evaluate(model: DistilBertForQuestionAnswering,
             # (start_loss + end_loss) / 2
             # where start_loss and end_loss are, in turn, computed as averages 
             # over the batch
-            start_acc = compute_accuracy(start_pred, start_true)
-            end_acc = compute_accuracy(end_pred, end_true)
-            total_acc = (start_acc + end_acc) / 2
+            n_correct_start = n_correct(start_pred, start_true)
+            n_correct_end = n_correct(end_pred, end_true)
+            n_correct_avg = (n_correct_start + n_correct_end) / 2
 
             n_val += n_samples
             val_loss += loss * n_samples
-            val_acc += total_acc * n_samples
+            val_acc += n_correct_avg
 
-            return n_val, val_loss, val_acc
+    return n_val, val_loss, val_acc
     
 
-def compute_accuracy(pred: torch.Tensor, true: torch.Tensor) -> float:
+def n_correct(pred: torch.Tensor, true: torch.Tensor) -> float:
     assert len(pred) == len(true)
-    return ((pred == true).sum() / len(pred)).item()
+    return (pred == true).sum().item() 
