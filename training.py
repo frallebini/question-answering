@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import DataLoader
 from config import conf
 from tqdm import tqdm
-from  transformers import DistilBertForQuestionAnswering
+from transformers import DistilBertForQuestionAnswering
 
 
 def train_loop(model: DistilBertForQuestionAnswering, 
@@ -59,7 +59,7 @@ def train_loop(model: DistilBertForQuestionAnswering,
             opt.step()
             opt.zero_grad()
         
-        n_val, val_loss, val_acc = evaluate(model, val_loader, device)
+        n_val, val_loss, val_acc, _, _ = evaluate(model, val_loader, device)
         
         train_loss /= n_train
         train_acc /= n_train
@@ -77,16 +77,22 @@ def train_loop(model: DistilBertForQuestionAnswering,
 
 def evaluate(model: DistilBertForQuestionAnswering,
              val_loader: DataLoader,
-             device: torch.device) -> tuple[int, float, float]:
+             device: torch.device) -> tuple[int,
+                                            float,
+                                            float,
+                                            list[tuple[int, int]],
+                                            list[tuple[int, int]]]:
     
     model.eval()
-            
+    val_iter = tqdm(val_loader)
+
     n_val = 0
     val_loss = 0
     val_acc = 0
-
+    pred = []
+    ref = []
     with torch.no_grad():
-        for val_batch in val_loader:
+        for val_batch in val_iter:
             input_ids = val_batch['input_ids'].to(device)
             attention_mask = val_batch['attention_mask'].to(device)
             start_true = val_batch['start_positions'].to(device)
@@ -116,10 +122,19 @@ def evaluate(model: DistilBertForQuestionAnswering,
             n_val += n_samples
             val_loss += loss * n_samples
             val_acc += n_correct_avg
+            pred_start_tokens = [i.item() for i in start_pred]
+            pred_end_tokens = [i.item() for i in end_pred]
+            ref_start_tokens = [i.item() for i in start_true]
+            ref_end_tokens = [i.item() for i in end_true]
 
-    return n_val, val_loss, val_acc
+            pred += zip(pred_start_tokens, pred_end_tokens)
+            ref += zip(ref_start_tokens, ref_end_tokens)
+
+    return n_val, val_loss, val_acc, pred, ref
     
 
 def n_correct(pred: torch.Tensor, true: torch.Tensor) -> float:
     assert len(pred) == len(true)
     return (pred == true).sum().item() 
+
+
