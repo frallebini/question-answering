@@ -13,10 +13,10 @@ from transformers import BertForQuestionAnswering, BertModel
 # CONFIGS
 OUTPUT_FILE_PATH = "predictions.txt"
 HF_BASE_MODEL_NAME = "prajjwal1/bert-medium"
-MODEL_WEIGHTS_PATH = './models/bert-medium_0201.pt'
-MODEL_WEIGHTS_PATH = './models/bert-medium-v2-eFWDSB_0204.pt'
-BATCH_SIZE = 16
+MODEL_WEIGHTS_PATH = 'bert-medium-final.pt'
 
+BATCH_SIZE = 16
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 # 1. Loading the json into a pandas df
 def load_json(json_path) -> pd.DataFrame:
@@ -67,7 +67,7 @@ class CustomBertForQuestionAnswering(BertForQuestionAnswering):
 
 def load_model() -> BertForQuestionAnswering:
     model = CustomBertForQuestionAnswering.from_pretrained(HF_BASE_MODEL_NAME)
-    model.load_state_dict(torch.load(MODEL_WEIGHTS_PATH))
+    model.load_state_dict(torch.load(MODEL_WEIGHTS_PATH, map_location=device))
     return model
 
 
@@ -99,10 +99,10 @@ def compute_answers(model, loader) -> pd.DataFrame:
     answer_end_tok = []
 
     # Get outputs from the model
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     model.to(device)
     model.eval()
 
+    # Note: comments not included for brevity. See training.ipynb for the explanation
     with torch.no_grad():
         for batch in tqdm(loader, total=len(loader), leave=False):
             args = dict(
@@ -112,8 +112,7 @@ def compute_answers(model, loader) -> pd.DataFrame:
             )
             outputs = model(**args)
 
-            # Get the answers' TOK indices, masked by the Token-Type-Ids (1s only iff context)
-            mask = ((args['token_type_ids'] - 1) * torch.inf).nan_to_num(0)  # -inf if tok!=context; 0 otherwise
+            mask = ((args['token_type_ids'] - 1) * torch.inf).nan_to_num(0)
             start_logits = outputs['start_logits'] + mask
             end_logits = outputs['end_logits'] + mask
             start_tok_indices = torch.argmax(start_logits, dim=1).tolist()
@@ -121,25 +120,17 @@ def compute_answers(model, loader) -> pd.DataFrame:
 
             for k in range(len(start_tok_indices)):
                 sti, eti = start_tok_indices[k], end_tok_indices[k]
-                # Check if start token index <= end token index (VALID)
                 if sti <= eti:
                     answer_start_tok.append(sti)
                     answer_end_tok.append(eti)
                     continue
-
-                # Otherwise, pick (start, end) = (i, j)
-                # such that i <= j and start_logits[i] + end_logits[j] is the highest
-                # among all the (i, j) couples
                 valid_logits = {}
                 candidate_sti = start_logits[k].argsort(descending=True)[:20]
                 candidate_eti = end_logits[k].argsort(descending=True)[:20]
-
                 for i in candidate_sti:
                     for j in candidate_eti:
                         if i <= j:
                             valid_logits[(i, j)] = (start_logits[k, i] + end_logits[k, j]).item()
-
-                # Get the argmax of the valid logits sum and append the results
                 if len(valid_logits) > 0:
                     sti, eti = max(valid_logits, key=valid_logits.get)
                 answer_start_tok.append(sti)
@@ -209,7 +200,7 @@ def main():
     res = compute_answers_wrapper(model, df)
 
     # Saving to file
-    print("🖨️ Saving the answers")
+    print(f"🖨️ Saving answers in {OUTPUT_FILE_PATH}")
     answers_to_file(res)
 
     print("✨✨✨  DONE  ✨✨✨")

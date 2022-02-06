@@ -1,0 +1,12 @@
+transformers
+numpy
+tqdm
+notebook
+wandb
+pandas
+seaborn
+matplotlib
+torchinfo
+
+-f https://download.pytorch.org/whl/cu102/torch_stable.html
+torch==1.10.2+cu102
