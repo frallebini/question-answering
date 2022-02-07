@@ -16,7 +16,8 @@ HF_BASE_MODEL_NAME = "prajjwal1/bert-medium"
 MODEL_WEIGHTS_PATH = 'bert-medium-final.pt'
 
 BATCH_SIZE = 16
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+device_name = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = torch.device(device_name)
 
 # 1. Loading the json into a pandas df
 def load_json(json_path) -> pd.DataFrame:
@@ -196,7 +197,7 @@ def main():
     model = load_model()
 
     # Computing answers
-    print("🤖 Computing answers")
+    print(f"🤖 Computing answers [{device_name}]")
     res = compute_answers_wrapper(model, df)
 
     # Saving to file
