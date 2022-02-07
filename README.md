@@ -10,20 +10,25 @@ Question Answering is the task of selecting the span of text inside a passage th
 
 * Place the [model file](https://liveunibo-my.sharepoint.com/:u:/g/personal/manuel_mariani2_studio_unibo_it/EVL8c-Sr-3NIkN41HmFOyvMBEkUMIvAIJ7Nv3xaJGr1fUg?e=mqHqg1) inside the root folder of the project. You can download our final model authenticating with a Unibo account [from here](https://liveunibo-my.sharepoint.com/:u:/g/personal/manuel_mariani2_studio_unibo_it/EVL8c-Sr-3NIkN41HmFOyvMBEkUMIvAIJ7Nv3xaJGr1fUg?e=mqHqg1).
 
+* Install the requirements.
+  ```sh
+  pip install -r requirements.txt
+  ```
+
 * Run the script [compute_answers.py](compute_answers.py) to execute the inference on the provided dataset and generate the answers file.
-```sh
-python3 compute_answers.py <path_to_json_file>
-```
-> :warning: **Heavy process:** Inference will run automatically on a GPU if available. Even if running it using a CPU is allowed, it is highly discouraged.
+  ```sh
+  python3 compute_answers.py <path_to_json_file>
+  ```
+  > :warning: **Heavy process:** Inference will run automatically on a GPU if available. Even if running it using a CPU is allowed, it is highly discouraged.
 
 * Run the [evaluation script](evaluate.py) to evaluate the results.
-```sh
-python3 evaluate.py <path_to_ground_truth> predictions.txt
-```
-Of course, if the predictions path is changed, the evaluation command will become
-```sh
-python3 evaluate.py <path_to_ground_truth> <path_to_predictions_file>
-```
+  ```sh
+  python3 evaluate.py <path_to_ground_truth> predictions.txt
+  ```
+  Of course, if the predictions path is changed, the evaluation command will become
+  ```sh
+  python3 evaluate.py <path_to_ground_truth> <path_to_predictions_file>
+  ```
 
 ## Authors
 
