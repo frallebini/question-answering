@@ -4,7 +4,7 @@
 
 *Alma Mater Studiorum Università di Bologna AY 2021–2022*
 
-Question Answering is the task of selecting the span of text inside a passage that answers a given reading-comprehension question. Our task is to build a model performing question answering on the SQuAD1.1 dataset, which, as opposed to the 2.0 version, \emph{does not} contain unanswerable questions, namely questions whose answer cannot be extracted anywhere in the corresponding passage.
+Question Answering is the task of selecting the span of text inside a passage that answers a given reading-comprehension question. Our task is to build a model performing question answering on the SQuAD1.1 dataset, which, as opposed to the 2.0 version, does not contain unanswerable questions, namely questions whose answer cannot be extracted anywhere from the corresponding passage.
 
 ## Run
 
