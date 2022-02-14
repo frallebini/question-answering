@@ -2,7 +2,7 @@
 
 Question Answering is the task of selecting the span of text inside a passage that answers a given reading-comprehension question.
 
-We tackle question answering on SQuAD 1.1 by fine-tuning knowledge- distilled versions of BERT proposed in the recent literature and comparing their results.
+We tackle question answering on SQuAD 1.1 by fine-tuning distilled versions of BERT proposed in the recent literature and comparing their results.
 
 See [report.pdf](report.pdf) for details.
 
