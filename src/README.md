@@ -1,6 +1,6 @@
 # How to run
 
-1. Place the [model file](https://liveunibo-my.sharepoint.com/:u:/g/personal/manuel_mariani2_studio_unibo_it/EVL8c-Sr-3NIkN41HmFOyvMBEkUMIvAIJ7Nv3xaJGr1fUg?e=mqHqg1) inside the root folder of the project.
+1. Place the [model file](https://drive.google.com/file/d/1oAZ7HGbPsRlOciaoDtercIdLCA27PCXR/view?usp=sharing) inside the root folder of the project.
 
 2. Install the requirements:
     ```sh
